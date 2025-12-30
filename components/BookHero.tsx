@@ -1,17 +1,21 @@
 import React from 'react';
-import { Book } from '../types';
+import { Book, LanguageCode } from '../types';
+import { TRANSLATIONS } from '../constants';
 
 interface BookHeroProps {
   book: Book;
   onStartReading: () => void;
+  currentLang: LanguageCode;
 }
 
-const BookHero: React.FC<BookHeroProps> = ({ book, onStartReading }) => {
+const BookHero: React.FC<BookHeroProps> = ({ book, onStartReading, currentLang }) => {
   // Generate a deterministic image URL based on the book ID so it's consistent for the same book
   const imageUrl = `https://picsum.photos/seed/${book.id}hero/600/900`;
+  const t = TRANSLATIONS[currentLang];
+  const isRtl = currentLang === 'ar';
 
   return (
-    <div className="flex flex-col lg:flex-row items-center justify-center max-w-6xl mx-auto px-6 py-12 lg:py-24 gap-12">
+    <div className="flex flex-col lg:flex-row items-center justify-center max-w-6xl mx-auto px-6 py-12 lg:py-24 gap-12" dir={isRtl ? 'rtl' : 'ltr'}>
       {/* Book Cover / Visual */}
       <div className="w-full max-w-sm lg:max-w-md shrink-0 perspective-1000 group">
         <div className="relative aspect-[2/3] rounded-sm shadow-2xl transition-transform duration-700 transform group-hover:rotate-y-6 group-hover:rotate-x-6">
@@ -21,7 +25,7 @@ const BookHero: React.FC<BookHeroProps> = ({ book, onStartReading }) => {
             className="w-full h-full object-cover rounded-sm"
           />
           {/* Book Spine Effect */}
-          <div className="absolute top-0 left-0 w-4 h-full bg-gradient-to-r from-black/20 to-transparent z-10 rounded-l-sm"></div>
+          <div className={`absolute top-0 w-4 h-full bg-gradient-to-r from-black/20 to-transparent z-10 ${isRtl ? 'right-0 rounded-r-sm' : 'left-0 rounded-l-sm'}`}></div>
           {/* Texture Overlay */}
           <div className="absolute inset-0 bg-stone-900/10 mix-blend-multiply rounded-sm"></div>
         </div>
@@ -30,12 +34,12 @@ const BookHero: React.FC<BookHeroProps> = ({ book, onStartReading }) => {
       {/* Content */}
       <div className="flex flex-col items-start space-y-8 max-w-xl">
         <div className="space-y-4">
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-3 rtl:space-x-reverse">
              <span className="bg-stone-200 text-stone-600 px-2 py-1 text-xs font-bold tracking-widest uppercase rounded">
-               Daily Pick
+               {t.dailyPick}
              </span>
              <span className="text-stone-400 text-sm font-medium tracking-wide">
-               {new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+               {new Date().toLocaleDateString(currentLang, { weekday: 'long', month: 'long', day: 'numeric' })}
              </span>
           </div>
           
@@ -43,7 +47,7 @@ const BookHero: React.FC<BookHeroProps> = ({ book, onStartReading }) => {
             {book.title}
           </h1>
           <p className="font-serif text-xl lg:text-2xl text-stone-600 italic">
-            by {book.author}
+            {t.by} {book.author}
           </p>
         </div>
 
@@ -60,8 +64,8 @@ const BookHero: React.FC<BookHeroProps> = ({ book, onStartReading }) => {
             onClick={onStartReading}
             className="group relative inline-flex items-center justify-center px-8 py-4 text-lg font-medium tracking-wide text-white transition-all duration-200 bg-stone-900 rounded-full hover:bg-accent focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-stone-900"
           >
-            <span>Start Reading (5 min)</span>
-            <svg className="w-5 h-5 ml-2 -mr-1 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <span>{t.startReading}</span>
+            <svg className={`w-5 h-5 transition-transform ${isRtl ? 'mr-2 -ml-1 group-hover:-translate-x-1 rotate-180' : 'ml-2 -mr-1 group-hover:translate-x-1'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
             </svg>
           </button>

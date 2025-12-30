@@ -2,19 +2,24 @@ import React, { useEffect, useState } from 'react';
 import { Book, BookSummary, LANGUAGES, LanguageCode } from '../types';
 import { fetchBookSummary } from '../services/geminiService';
 import LoadingSpinner from './LoadingSpinner';
+import LanguageSelector from './LanguageSelector';
+import { TRANSLATIONS } from '../constants';
 
 interface ReaderProps {
   book: Book;
+  language: LanguageCode;
+  onLanguageChange: (lang: LanguageCode) => void;
   onFinish: () => void;
   onBack: () => void;
 }
 
-const Reader: React.FC<ReaderProps> = ({ book, onFinish, onBack }) => {
+const Reader: React.FC<ReaderProps> = ({ book, language, onLanguageChange, onFinish, onBack }) => {
   const [summary, setSummary] = useState<BookSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [scrollProgress, setScrollProgress] = useState(0);
-  const [currentLang, setCurrentLang] = useState<LanguageCode>('en');
+
+  const t = TRANSLATIONS[language];
 
   useEffect(() => {
     let mounted = true;
@@ -22,15 +27,19 @@ const Reader: React.FC<ReaderProps> = ({ book, onFinish, onBack }) => {
     const loadSummary = async () => {
       try {
         setLoading(true);
+        // Do not nullify summary immediately to prevent flashing if just switching language, 
+        // but since we want to show it's working, a quick spinner is fine.
+        setSummary(null); 
+        
         // Find the full English name for the prompt
-        const langName = LANGUAGES.find(l => l.code === currentLang)?.name || 'English';
+        const langName = LANGUAGES.find(l => l.code === language)?.name || 'English';
         const data = await fetchBookSummary(book.title, book.author, langName);
         if (mounted) {
           setSummary(data);
         }
       } catch (err) {
         if (mounted) {
-          setError("Unable to retrieve the book's wisdom at this moment. Please try again later.");
+          setError(t.errorMsg);
         }
       } finally {
         if (mounted) {
@@ -41,7 +50,7 @@ const Reader: React.FC<ReaderProps> = ({ book, onFinish, onBack }) => {
 
     loadSummary();
     return () => { mounted = false; };
-  }, [book, currentLang]);
+  }, [book, language]);
 
   // Handle scroll progress for the reading bar
   useEffect(() => {
@@ -56,30 +65,46 @@ const Reader: React.FC<ReaderProps> = ({ book, onFinish, onBack }) => {
   }, []);
 
   const handleShare = async () => {
-    const shareData = {
+    const currentUrl = window.location.href;
+    const isValidUrl = currentUrl.startsWith('http');
+    
+    const shareData: ShareData = {
       title: `Lumina Read: ${book.title}`,
       text: `Reading a summary of ${book.title} by ${book.author} on Lumina Read.`,
-      url: window.location.href
     };
+
+    if (isValidUrl) {
+      shareData.url = currentUrl;
+    }
+
     try {
-      if (navigator.share) {
+      if (navigator.share && (!navigator.canShare || navigator.canShare(shareData))) {
         await navigator.share(shareData);
       } else {
-        await navigator.clipboard.writeText(`${shareData.text} ${shareData.url}`);
-        alert('Link copied to clipboard!');
+        throw new Error('Share API unavailable or data invalid');
       }
     } catch (err) {
-      console.error('Error sharing:', err);
+      // Ignore user cancellations
+      if ((err as Error).name === 'AbortError') return;
+      
+      console.warn('Native share failed, using clipboard fallback', err);
+      try {
+        const textToCopy = isValidUrl ? `${shareData.text} ${currentUrl}` : shareData.text;
+        await navigator.clipboard.writeText(textToCopy);
+        alert(t.copied);
+      } catch (clipErr) {
+        console.error('Clipboard failed', clipErr);
+      }
     }
   };
 
-  const selectedLangConfig = LANGUAGES.find(l => l.code === currentLang);
+  const selectedLangConfig = LANGUAGES.find(l => l.code === language);
   const isRtl = selectedLangConfig?.dir === 'rtl';
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-paper">
-        <LoadingSpinner />
+        <LoadingSpinner message={t.brewing} />
       </div>
     );
   }
@@ -89,7 +114,7 @@ const Reader: React.FC<ReaderProps> = ({ book, onFinish, onBack }) => {
       <div className="min-h-screen flex flex-col items-center justify-center bg-paper px-6 text-center">
         <p className="text-red-600 font-serif mb-4">{error}</p>
         <button onClick={onBack} className="text-stone-500 underline hover:text-stone-800">
-          Return Home
+          {t.returnHome}
         </button>
       </div>
     );
@@ -100,7 +125,7 @@ const Reader: React.FC<ReaderProps> = ({ book, onFinish, onBack }) => {
   return (
     <div className="min-h-screen bg-paper pb-24 relative selection:bg-accent/20">
       {/* Sticky Progress Bar */}
-      <div className="fixed top-0 left-0 w-full h-1.5 bg-stone-200 z-50">
+      <div className="fixed top-0 left-0 w-full h-1.5 bg-stone-200 z-50" dir="ltr">
         <div 
           className="h-full bg-accent transition-all duration-150 ease-out"
           style={{ width: `${scrollProgress}%` }}
@@ -108,33 +133,21 @@ const Reader: React.FC<ReaderProps> = ({ book, onFinish, onBack }) => {
       </div>
 
       {/* Navigation */}
-      <nav className="sticky top-0 z-40 bg-paper/90 backdrop-blur-sm border-b border-stone-100 px-4 md:px-6 py-4 flex justify-between items-center">
+      <nav className="sticky top-0 z-40 bg-paper/90 backdrop-blur-sm border-b border-stone-100 px-4 md:px-6 py-4 flex justify-between items-center" dir={isRtl ? 'rtl' : 'ltr'}>
         <div className="flex items-center">
           <button 
             onClick={onBack}
-            className="text-stone-400 hover:text-stone-900 transition-colors flex items-center gap-2 text-sm font-medium uppercase tracking-wide mr-4"
+            className={`text-stone-400 hover:text-stone-900 transition-colors flex items-center gap-2 text-sm font-medium uppercase tracking-wide ${isRtl ? 'ml-4' : 'mr-4'}`}
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-            <span className="hidden sm:inline">Back</span>
+            <svg className={`w-4 h-4 ${isRtl ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+            <span className="hidden sm:inline">{t.back}</span>
           </button>
           
-          {/* Language Selector */}
-          <div className="relative group">
-            <select 
-              value={currentLang}
-              onChange={(e) => setCurrentLang(e.target.value as LanguageCode)}
-              className="appearance-none bg-stone-100 border border-stone-200 text-stone-700 py-1 pl-3 pr-8 rounded-full text-xs font-bold uppercase tracking-wide focus:outline-none focus:border-stone-400 cursor-pointer hover:bg-stone-200 transition-colors"
-            >
-              {LANGUAGES.map(lang => (
-                <option key={lang.code} value={lang.code}>
-                  {lang.nativeName}
-                </option>
-              ))}
-            </select>
-            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-stone-500">
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-            </div>
-          </div>
+          <LanguageSelector 
+            currentLang={language} 
+            onLanguageChange={onLanguageChange} 
+            variant="dark"
+          />
         </div>
 
         <div className="flex items-center gap-3">
@@ -153,13 +166,13 @@ const Reader: React.FC<ReaderProps> = ({ book, onFinish, onBack }) => {
         
         {/* Header */}
         <header className="mb-12 text-center">
-          <p className="text-stone-500 font-serif italic mb-4">A 5-minute summary of</p>
+          <p className="text-stone-500 font-serif italic mb-4">{t.summaryOf}</p>
           <h1 className="font-display text-4xl lg:text-5xl font-bold text-ink mb-6 leading-tight">
             {book.title}
           </h1>
           <div className="w-16 h-1 bg-accent mx-auto mb-6"></div>
           <p className="text-stone-600 font-sans tracking-wide uppercase text-sm font-semibold">
-            By {book.author}
+            {t.by} {book.author}
           </p>
         </header>
 
@@ -174,7 +187,7 @@ const Reader: React.FC<ReaderProps> = ({ book, onFinish, onBack }) => {
             <span className={`bg-stone-100 p-1.5 rounded text-accent ${isRtl ? 'ml-3' : 'mr-3'}`}>
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
             </span>
-            Key Insights
+            {t.keyInsights}
           </h3>
           <ul className="space-y-6">
             {summary.keyInsights.map((insight, idx) => (
@@ -188,7 +201,7 @@ const Reader: React.FC<ReaderProps> = ({ book, onFinish, onBack }) => {
 
         {/* Notable Quotes */}
         <section className="mb-12">
-          <h3 className="font-display text-2xl font-semibold mb-8 text-center text-ink">Notable Quotes</h3>
+          <h3 className="font-display text-2xl font-semibold mb-8 text-center text-ink">{t.notableQuotes}</h3>
           <div className="space-y-8">
             {summary.notableQuotes.map((quote, idx) => (
               <blockquote key={idx} className={`relative p-6 lg:p-8 bg-stone-50 border-accent rounded-r-lg ${isRtl ? 'border-r-4 pr-12' : 'border-l-4'}`}>
@@ -203,7 +216,7 @@ const Reader: React.FC<ReaderProps> = ({ book, onFinish, onBack }) => {
 
         {/* Conclusion */}
         <section className="mb-16">
-          <h3 className="font-display text-2xl font-semibold mb-4 text-ink">Final Thought</h3>
+          <h3 className="font-display text-2xl font-semibold mb-4 text-ink">{t.finalThought}</h3>
           <p className="font-serif text-lg lg:text-xl leading-relaxed text-stone-800">
             {summary.conclusion}
           </p>
@@ -213,9 +226,9 @@ const Reader: React.FC<ReaderProps> = ({ book, onFinish, onBack }) => {
         <div className="flex justify-center">
           <button 
             onClick={onFinish}
-            className="group px-8 py-4 bg-stone-900 text-white rounded-full font-medium tracking-wide hover:bg-accent transition-all duration-300 shadow-xl hover:shadow-2xl hover:-translate-y-1 flex items-center"
+            className="group px-8 py-4 bg-stone-900 text-white rounded-full font-medium tracking-wide hover:bg-accent transition-all duration-200 shadow-xl hover:shadow-2xl hover:-translate-y-1 flex items-center"
           >
-            <span>Mark as Read</span>
+            <span>{t.markAsRead}</span>
             <svg className={`w-5 h-5 transition-transform duration-300 group-hover:scale-110 ${isRtl ? 'mr-2 rotate-180' : 'ml-2'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
           </button>
         </div>
